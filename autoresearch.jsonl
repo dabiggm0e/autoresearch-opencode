@@ -1,1 +1,3 @@
-{"type":"config","name":"bogo-sort-optimize","metricName":"runtime","metricUnit":"s","bestDirection":"lower"}
+{"type":"config","name":"bogo-sort-optimize","metricName":"runtime","metricUnit":"s","bestDirection":"lower"}{"run":1,"commit":"dcb54c9","metric":15.605,"metrics":{"shuffle_count":3565099},"status":"keep","description":"baseline","timestamp":1773516683,"segment":0}
+{"run":2,"commit":"c7fd4b6","metric":16.524,"metrics":{"shuffle_count":1352569},"status":"keep","description":"Approach 1: Built-in sorted() comparison","timestamp":1773516700,"segment":0}
+{"run":3,"commit":"approach2","metric":17.654,"metrics":{"shuffle_count":1914514},"status":"discard","description":"Approach 2: itertools pairwise check","timestamp":1773516750,"segment":0}
