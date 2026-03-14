@@ -19,10 +19,7 @@ _shuffle_count = 0
 
 def is_sorted(array: list) -> bool:
     """Check if the array is sorted in ascending order."""
-    for i in range(len(array) - 1):
-        if array[i] > array[i + 1]:
-            return False
-    return True
+    return array == sorted(array)
 
 
 def bogo_sort(array: list) -> list:
