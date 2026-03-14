@@ -9,6 +9,7 @@ Usage:
     python3 bogo_sort.py
 """
 
+import bisect
 import random
 import time
 
@@ -18,8 +19,21 @@ _shuffle_count = 0
 
 
 def is_sorted(array: list) -> bool:
-    """Check if the array is sorted in ascending order."""
-    return all(a <= b for a, b in zip(array, array[1:]))
+    """Check if the array is sorted in ascending order using binary search."""
+    if len(array) <= 1:
+        return True
+    # Use bisect to find where the order breaks (binary search)
+    # This is O(log n) for detecting unsorted arrays
+    sorted_copy = sorted(array)
+    # Binary search for first difference
+    lo, hi = 0, len(array)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if array[mid] == sorted_copy[mid]:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo >= len(array) - 1
 
 
 def bogo_sort(array: list) -> list:
