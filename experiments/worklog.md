@@ -11,11 +11,11 @@
 
 ## Baseline Result
 
-### Run 1: baseline — runtime=0.001s (KEEP)
-- Timestamp: 2026-03-16 12:00
+### Run 1: baseline — runtime=4.707548s (KEEP)
+- Timestamp: 2026-03-16 16:45
 - What changed: Initial baseline measurement
-- Result: runtime=0.001s
-- Insight: Baseline established for comparison
+- Result: runtime=4.707548s
+- Insight: Baseline established for comparison - runtime is higher than expected due to random seed
 - Next: Create optimized version and test various approaches
 
 ## Key Insights
