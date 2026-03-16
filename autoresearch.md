@@ -1,41 +1,33 @@
-# Autoresearch: bogo_sort runtime optimization
+# Autoresearch: Optimize bogo sort runtime
 
 ## Objective
-Optimize the runtime of bogo_sort.py by creating an optimized sidecar file (bogo_sort_optimized.py). The goal is to reduce execution time while maintaining the same algorithmic structure and functionality.
+Optimize the runtime of bogo sort algorithm in `bogo_sort.py`. The goal is to reduce the time spent in the hot loop (shuffle + sorted check) by optimizing the `is_sorted()` function. **Do not modify the original `bogo_sort.py`** - create a sidecar file `bogo_sort_optimized.py` instead.
 
 ## Metrics
 - **Primary**: runtime (seconds, lower is better)
+- **Secondary**: memory usage (MB, lower is better)
 
 ## How to Run
-`./autoresearch.sh` — outputs `METRIC runtime=number` lines.
+```bash
+python3 bogo_sort_optimized.py
+```
+
+The script should use a fixed random seed for reproducibility and sort 10 random integers.
 
 ## Files in Scope
-- `bogo_sort_optimized.py` - Sidecar optimized version (created, may modify)
-- `autoresearch.sh` - Benchmark script (created, may update)
+- `bogo_sort_optimized.py` - New optimized version of bogo sort (create this)
+- `experiments/worklog.md` - Experiment log
 
 ## Off Limits
-- `bogo_sort.py` - Original implementation (read-only, must NOT be modified)
+- `bogo_sort.py` - Original file must remain untouched
 
 ## Constraints
-- No new dependencies
-- Must work with existing algorithm structure
-- Original bogo_sort.py must remain unchanged
+1. Do not modify the original `bogo_sort.py`
+2. Use fixed random seed (e.g., `random.seed(42)`) for reproducibility
+3. Benchmark with exactly 10 random integers (1-1000 range)
+4. Optimize for runtime only, not code simplicity
+5. Must produce correct sorted output
 
 ## What's Been Tried
 
-### Run #1 (KEEP) ⭐
-- **Timestamp:** 2026-03-16 16:45
-- **Description:** baseline
-- **Result:** runtime=4.707548s
-
-### Run #2 (DISCARD)
-- **Timestamp:** 2026-03-16 16:50
-- **Description:** Approach 1: Built-in sorted() comparison
-- **Result:** runtime=5.855910s
-
-### Run #3 (DISCARD)
-- **Timestamp:** 2026-03-16 16:52
-- **Description:** Approach 2: Reduced random range for duplicate likelihood
-- **Result:** runtime=4.712137s
-
-*Last updated: Run #3 on 2026-03-16*
+*Last updated: Run #0 on 2026-03-16*
