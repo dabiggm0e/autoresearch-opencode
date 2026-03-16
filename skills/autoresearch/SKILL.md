@@ -46,7 +46,7 @@ This is the heart of the session. A fresh agent with no context should be able t
 and architectural insights so the agent doesn't repeat failed approaches.>
 ```
 
-Update `autoresearch.md` periodically — especially the "What's Been Tried" section — so resuming agents have full context.
+**MANDATORY:** Update `autoresearch.md` after EVERY experiment. See the Logging Results section (step 4) for the exact protocol. The "What's Been Tried" section must reflect all runs in autoresearch.jsonl immediately after each result is logged.
 
 ### `autoresearch.sh`
 
@@ -109,6 +109,85 @@ echo '{"type":"config","name":"<name>","metricName":"<metric>","metricUnit":"<un
 
 **CRITICAL: JSONL data must never be corrupted or lost.**
 
+### Pre-Experiment Validation (MANDATORY)
+
+**BEFORE running each experiment, execute these validation checks:**
+
+1. **Count existing runs in JSONL** to determine the next run number
+2. **Verify JSONL integrity** - last 5 lines must be valid JSON
+3. **Check worklog consistency** - count entries in worklog.md should match JSONL count
+4. **Validate atomic write capability** - ensure temp file creation works
+5. **Confirm autoresearch.md "Last updated" marker** exists and matches JSONL count
+
+**If any validation fails, DO NOT proceed with the experiment. Fix the issue first.**
+
+```bash
+# Pre-experiment validation (run BEFORE each experiment)
+pre_experiment_validation() {
+    local jsonl_file="autoresearch.jsonl"
+    local worklog_file="experiments/worklog.md"
+    
+    echo "  Pre-experiment validation started..." >&2
+    
+    # 1. Count existing runs
+    if [[ -f "$jsonl_file" ]]; then
+        local run_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
+        echo "  Current runs in JSONL: $run_count" >&2
+    else
+        echo "  ERROR: JSONL file does not exist!" >&2
+        return 1
+    fi
+    
+    # 2. Verify JSONL integrity
+    if ! tail -n 5 "$jsonl_file" 2>/dev/null | while IFS= read -r line; do
+        if [[ -n "$line" ]] && ! echo "$line" | python3 -m json.tool >/dev/null 2>&1; then
+            echo "  ERROR: Invalid JSON found in JSONL file!" >&2
+            return 1
+        fi
+    done; then
+        echo "  ERROR: JSONL integrity check failed!" >&2
+        return 1
+    fi
+    echo "  JSONL integrity: OK" >&2
+    
+    # 3. Check worklog consistency
+    if [[ -f "$worklog_file" ]]; then
+        local worklog_count=$(grep -c "^### Run" "$worklog_file" 2>/dev/null || echo 0)
+        if [[ "$worklog_count" -ne "$run_count" ]]; then
+            echo "  WARNING: Worklog has $worklog_count runs, JSONL has $run_count runs!" >&2
+            echo "  This indicates data loss. Check backups before proceeding." >&2
+        else
+            echo "  Worklog consistency: OK" >&2
+        fi
+    fi
+    
+    # 4. Validate atomic write capability
+    local temp_test="autoresearch.jsonl.tmp_validation.$$"
+    if ! touch "$temp_test" 2>/dev/null; then
+        echo "  ERROR: Cannot create temp file for atomic writes!" >&2
+        return 1
+    fi
+    rm -f "$temp_test"
+    echo "  Atomic write capability: OK" >&2
+    
+    # 5. Confirm autoresearch.md marker
+    if [[ -f "autoresearch.md" ]]; then
+        if ! grep -qP '\*Last updated: Run #\d+ on [0-9-]+\*' autoresearch.md 2>/dev/null; then
+            echo "  WARNING: Missing 'Last updated' marker in autoresearch.md!" >&2
+        fi
+    fi
+    
+    echo "  Pre-experiment validation: PASSED" >&2
+    return 0
+}
+
+# MANDATORY: Call this BEFORE each experiment
+pre_experiment_validation || {
+    echo "  CRITICAL: Pre-experiment validation failed. Fix issues before proceeding." >&2
+    return 1
+}
+```
+
 ### Pre-Write Validation (before appending to JSONL)
 
 Before writing any new experiment result, validate the JSONL file:
@@ -143,36 +222,108 @@ validate_jsonl || {
 }
 ```
 
-### Atomic Write Pattern
+### Atomic Write Pattern (STRENGTHENED)
 
-Never append directly to JSONL. Use atomic write pattern:
+**CRITICAL: Never append directly to JSONL. Use the atomic write pattern with pre-write validation and post-write verification.**
 
 ```bash
 write_jsonl_entry() {
     local entry="$1"
     local jsonl_file="autoresearch.jsonl"
     local temp_file="${jsonl_file}.tmp.$$"
+    local expected_run=$(echo "$entry" | python3 -c "import sys,json; print(json.load(sys.stdin).get('run',0))" 2>/dev/null || echo 0)
     
-    # Create temp file
-    cat "$jsonl_file" > "$temp_file" 2>/dev/null || touch "$temp_file"
+    echo "  Starting atomic write for run #$expected_run..." >&2
     
-    # Append entry
-    echo "$entry" >> "$temp_file"
+    # PRE-WRITE VALIDATION
+    echo "  Pre-write validation..." >&2
     
-    # Validate the new entry
+    # 1. Validate the entry is valid JSON BEFORE any write operations
     if ! echo "$entry" | python3 -m json.tool >/dev/null 2>&1; then
-        rm -f "$temp_file"
-        echo "  WARNING: Invalid JSON entry, not writing" >&2
+        echo "  ERROR: Entry is not valid JSON, aborting write" >&2
+        return 1
+    fi
+    echo "  Entry JSON validity: OK" >&2
+    
+    # 2. Verify JSONL file exists and is readable
+    if [[ ! -f "$jsonl_file" ]]; then
+        echo "  ERROR: JSONL file does not exist!" >&2
         return 1
     fi
     
-    # Atomic move (guaranteed all-or-nothing)
-    mv "$temp_file" "$jsonl_file"
+    # 3. Validate current JSONL integrity
+    if ! tail -n 5 "$jsonl_file" 2>/dev/null | while IFS= read -r line; do
+        if [[ -n "$line" ]] && ! echo "$line" | python3 -m json.tool >/dev/null 2>&1; then
+            echo "  ERROR: JSONL file is corrupted, aborting write!" >&2
+            return 1
+        fi
+    done; then
+        echo "  ERROR: JSONL integrity check failed, aborting!" >&2
+        return 1
+    fi
+    echo "  JSONL integrity: OK" >&2
     
-    # Verify write succeeded
+    # 4. Ensure we can create temp file
+    if ! touch "$temp_file" 2>/dev/null; then
+        echo "  ERROR: Cannot create temp file for atomic write!" >&2
+        return 1
+    fi
+    
+    # CREATE TEMP FILE WITH EXISTING CONTENT
+    cat "$jsonl_file" > "$temp_file" 2>/dev/null || {
+        echo "  ERROR: Cannot read JSONL file!" >&2
+        rm -f "$temp_file"
+        return 1
+    }
+    
+    # APPEND NEW ENTRY
+    echo "$entry" >> "$temp_file"
+    
+    # POST-WRITE VERIFICATION (before atomic move)
+    echo "  Post-write verification (pre-move)..." >&2
+    
+    # 1. Verify temp file contains expected entry
+    if ! tail -n 1 "$temp_file" | python3 -c "import sys,json; json.load(sys.stdin)" >/dev/null 2>&1; then
+        echo "  ERROR: Temp file last line is not valid JSON!" >&2
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    # 2. Count runs in temp file (should be expected_run)
+    local temp_count=$(grep -c '"run":' "$temp_file" 2>/dev/null || echo 0)
+    if [[ "$temp_count" -lt "$expected_run" ]]; then
+        echo "  ERROR: Temp file has $temp_count runs, expected $expected_run!" >&2
+        rm -f "$temp_file"
+        return 1
+    fi
+    echo "  Temp file run count: OK ($temp_count runs)" >&2
+    
+    # ATOMIC MOVE (guaranteed all-or-nothing)
+    if ! mv "$temp_file" "$jsonl_file" 2>/dev/null; then
+        echo "  ERROR: Atomic move failed!" >&2
+        return 1
+    fi
+    
+    # FINAL POST-WRITE VERIFICATION
+    echo "  Final post-write verification..." >&2
+    
+    # 1. Verify JSONL file contains expected run count
     local new_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
-    echo "Write verification: $new_count runs in JSONL" >&2
+    if [[ "$new_count" -lt "$expected_run" ]]; then
+        echo "  ERROR: Write verification failed! Expected $expected_run runs, got $new_count!" >&2
+        echo "  DATA LOSS MAY HAVE OCCURRED. Check backups immediately." >&2
+        return 1
+    fi
+    echo "  Final run count: OK ($new_count runs)" >&2
     
+    # 2. Verify integrity of written file
+    if ! tail -n 1 "$jsonl_file" | python3 -m json.tool >/dev/null 2>&1; then
+        echo "  ERROR: Written entry is not valid JSON!" >&2
+        return 1
+    fi
+    echo "  Final integrity check: OK" >&2
+    
+    echo "  Atomic write completed successfully for run #$expected_run" >&2
     return 0
 }
 ```
@@ -233,6 +384,62 @@ backup_before_confirm() {
 
 When generating the dashboard, check for data consistency:
 
+#### Automatic Synchronization Check (MANDATORY)
+
+**Every time the dashboard is generated, automatically run this sync check:**
+
+```bash
+dashboard_sync_check() {
+    local jsonl_file="autoresearch.jsonl"
+    local worklog_file="experiments/worklog.md"
+    
+    echo "  Running dashboard synchronization check..." >&2
+    
+    # Count runs in JSONL
+    local jsonl_count=0
+    if [[ -f "$jsonl_file" ]]; then
+        jsonl_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
+    fi
+    
+    # Count runs in worklog
+    local worklog_count=0
+    if [[ -f "$worklog_file" ]]; then
+        worklog_count=$(grep -c "^### Run" "$worklog_file" 2>/dev/null || echo 0)
+    fi
+    
+    echo "  JSONL runs: $jsonl_count, Worklog runs: $worklog_count" >&2
+    
+    # If mismatch, auto-generate recovery guidance
+    if [[ "$jsonl_count" -ne "$worklog_count" ]]; then
+        local diff=$((jsonl_count - worklog_count))
+        if [[ $diff -gt 0 ]]; then
+            echo "  WARNING: $diff runs in JSONL are not documented in worklog!" >&2
+            echo "  ACTION: Generate missing worklog entries from JSONL data." >&2
+        else
+            local abs_diff=$((-diff))
+            echo "  WARNING: $abs_diff runs in worklog are not in JSONL!" >&2
+            echo "  ACTION: Check for data loss. Restore from backup if available." >&2
+        fi
+        
+        # Auto-check for backups
+        if [[ -f "./scripts/backup-state.sh" ]]; then
+            echo "  Checking for available backups..." >&2
+            ./scripts/backup-state.sh list "$jsonl_file" 2>/dev/null || echo "  No backups found or backup script failed" >&2
+        fi
+        
+        return 1
+    fi
+    
+    echo "  Synchronization check: PASSED (no drift detected)" >&2
+    return 0
+}
+
+# MANDATORY: Call this when generating dashboard
+dashboard_sync_check || {
+    echo "  Dashboard sync check failed. Include recovery banner in dashboard." >&2
+}
+```
+
 #### Data Consistency Check
 
 If the number of runs in `autoresearch.jsonl` doesn't match the number of entries in `experiments/worklog.md`:
@@ -256,6 +463,22 @@ Add this warning banner to the dashboard when inconsistency is detected:
 2. Restore if available: `scripts/backup-state.sh restore-auto`
 3. Otherwise, manually recreate missing runs from worklog
 ```
+
+---
+
+## Pre-flight Validation
+
+Before running each experiment, check that autoresearch.md is current:
+
+**Quick check:** Count runs in autoresearch.jsonl and compare to the "Last updated" marker in autoresearch.md. If they don't match, the update protocol was violated - manually update before continuing.
+
+**Verification step:**
+```bash
+grep -oP '\*Last updated: Run #\d+ on [0-9-]+\*' autoresearch.md | tail -1
+```
+This should show a marker with the current run count. If it's missing or shows an older run number, update autoresearch.md before proceeding.
+
+**If drift detected:** Don't skip updating autoresearch.md. A fresh agent resuming this session depends on having complete context of all runs, not just the JSONL data.
 
 ---
 
@@ -320,11 +543,52 @@ Use the current HEAD hash (before revert) as the commit field.
 echo '{"run":<N>,"commit":"<hash>","metric":<value>,"metrics":{<secondaries>},"status":"<status>","description":"<desc>","timestamp":'$(date +%s)',"segment":<seg>}' >> autoresearch.jsonl
 ```
 
-### 4. Update dashboard
+### 4. Update autoresearch.md "What's Been Tried" section
+
+**REQUIRED after every experiment. Do not skip this step.**
+
+Append a summary of the latest result to the "What's Been Tried" section. Use this format:
+
+```markdown
+### Run #{RUN_NUMBER} ({STATUS}) {EMOJI}
+- **Timestamp:** YYYY-MM-DD HH:MM
+- **Description:** {BRIEF DESCRIPTION OF WHAT WAS TRIED}
+- **Result:** runtime={METRIC_VALUE}s
+
+*Last updated: Run #{RUN_NUMBER} on YYYY-MM-DD*
+```
+
+**Example entry:**
+```markdown
+### Run #4 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 11:23
+- **Description:** Approach 6: Bisect-based binary search detection
+- **Result:** runtime=0.002s
+
+*Last updated: Run #7 on 2026-03-14*
+```
+
+**MANDATORY requirements (NON-NEGOTIABLE):**
+1. Include ALL runs (KEEP, DISCARD, CRASH) - do not filter any out
+2. Use emoji markers: ⭐ for KEEP, 💥 for CRASH, none for DISCARD
+3. **ALWAYS include the "Last updated" marker at end of section - this is MANDATORY for drift detection**
+4. The "Last updated" marker **MUST** show the current run number and date - do not skip this
+5. If the section doesn't exist yet, create it with header `## What's Been Tried`
+
+**CRITICAL: The "Last updated" marker is non-negotiable. Every experiment log MUST include this marker at the end of the "What's Been Tried" section. This enables:**
+- Pre-flight validation to detect drift between JSONL and markdown
+- Resuming agents to verify they have complete context
+- Automated checks to ensure no experiments were skipped
+
+**If you omit the "Last updated" marker, the pre-flight validation will FAIL and the next experiment cannot proceed.**
+
+**Implementation tip:** Read the latest entry from autoresearch.jsonl to get the run number, status, description, and metric value, then append formatted text to autoresearch.md. **ALWAYS append the "Last updated" marker as the final line.**
+
+### 5. Update dashboard
 
 After every log, regenerate `autoresearch-dashboard.md` (see Dashboard section below).
 
-### 5. Append to worklog
+### 6. Append to worklog
 
 After every experiment, append a concise entry to `experiments/worklog.md`. This file survives context compactions and crashes, giving any resuming agent (or the user) a complete narrative of the session. Format:
 
@@ -341,11 +605,109 @@ Also update the "Key Insights" and "Next Ideas" sections at the bottom of the wo
 
 **On setup**, create `experiments/worklog.md` with the session header, data summary, and baseline result. **On resume**, read `experiments/worklog.md` to recover context.
 
-### 6. Secondary metric consistency
+### 7. Secondary metric consistency
 
 Once you start tracking a secondary metric, you MUST include it in every subsequent result. Parse the JSONL to discover which secondary metrics have been tracked and ensure all are present.
 
 If you want to add a new secondary metric mid-session, that's fine — but from that point forward, always include it.
+
+### 8. Update Next Steps / Optimization Strategies (MANDATORY)
+
+**AFTER EVERY experiment, you MUST update the "Next Steps" or "Optimization Strategies" section in autoresearch.md.**
+
+This is NON-NEGOTIABLE. The "Next Steps" section guides future experiments and ensures the loop doesn't repeat failed approaches or miss promising paths.
+
+**Protocol:**
+
+1. **Read the latest experiment result** from autoresearch.jsonl
+2. **Analyze what was learned** - why it worked or failed
+3. **Update "Next Steps" section** with actionable follow-up ideas
+4. **Prune exhausted paths** - remove ideas that have been tried
+5. **Add new promising directions** based on insights from the latest run
+
+**Format for "Next Steps" section:**
+
+```markdown
+## Next Steps / Optimization Strategies
+
+**Last updated: After Run #{RUN_NUMBER} on YYYY-MM-DD**
+
+### Promising Directions (based on latest insights)
+- **Idea 1**: {Brief description of approach inspired by recent results}
+- **Idea 2**: {Another promising direction to explore}
+
+### Paths to Avoid (already tried, did not work)
+- {Approach that was tried and failed - include run number reference}
+
+### Current Best Insight
+{Key learning from the latest experiment that should guide future work}
+```
+
+**Example:**
+
+```markdown
+## Next Steps / Optimization Strategies
+
+**Last updated: After Run #7 on 2026-03-14**
+
+### Promising Directions (based on latest insights)
+- **Idea 1**: The bisect-based approach (#4) showed 99.9% improvement. Try adapting it to handle edge cases in the data.
+- **Idea 2**: Approach #6 failed but the profiling showed a different hot path. Optimize that section instead.
+
+### Paths to Avoid (already tried, did not work)
+- itertools pairwise check (#3) - slower than baseline
+- Built-in sorted() comparison (#2) - marginally worse performance
+
+### Current Best Insight
+Binary search detection is the winning pattern. Focus on variations of that approach rather than trying completely different algorithms.
+```
+
+**MANDATORY checklist for every experiment:**
+- [ ] Analyze the latest result and extract key insights
+- [ ] Update "Promising Directions" with new ideas
+- [ ] Add failed approaches to "Paths to Avoid"
+- [ ] Update "Current Best Insight" with the most important learning
+- [ ] Update the "Last updated" marker at the top of the section
+
+**CRITICAL: If you skip updating "Next Steps", the next agent (or you on resume) will lack guidance on what to try next. This wastes computational resources and time.**
+
+---
+
+## Example "What's Been Tried" Section Format
+
+After several experiments, the "What's Been Tried" section should look like:
+
+```markdown
+## What's Been Tried
+
+### Run #1 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 10:30
+- **Description:** baseline
+- **Result:** runtime=15.605s
+
+### Run #2 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 10:35
+- **Description:** Approach 1: Built-in sorted() comparison
+- **Result:** runtime=16.524s
+
+### Run #3 (DISCARD)
+- **Timestamp:** 2026-03-14 10:50
+- **Description:** Approach 2: itertools pairwise check
+- **Result:** runtime=17.654s
+
+### Run #4 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 11:23
+- **Description:** Approach 6: Bisect-based binary search detection
+- **Result:** runtime=0.002s
+
+*Last updated: Run #9 on 2026-03-14*
+```
+
+**Key formatting rules:**
+- Include ALL runs (KEEP, DISCARD, CRASH) - don't filter any out
+- Use emoji to quickly identify status: ⭐ = KEEP, 💥 = CRASH
+- Always end with the "Last updated" marker for drift detection
+- Keep descriptions concise but informative
 
 ---
 
@@ -472,8 +834,15 @@ When there is no `autoresearch.ideas.md` file and the loop ends, the research is
 
 ## User Steers
 
-User messages sent while an experiment is running should be noted and incorporated into the NEXT experiment. Finish your current experiment first — don't stop or ask for confirmation. Incorporate the user's idea in the next experiment.
+User messages sent while an experiment is running should be noted and incorporated into the NEXT experiment. Finish your current experiment first — **Do not stop or ask for confirmation**. Incorporate the user's idea in the next experiment.
 
 ## Updating autoresearch.md
 
-Periodically update `autoresearch.md` — especially the "What's Been Tried" section — so that a fresh agent resuming the loop has full context on what worked, what didn't, and what architectural insights have been gained. Do this every 5-10 experiments or after any significant breakthrough.
+**MANDATORY PROTOCOL:** Update `autoresearch.md` after **EVERY** experiment, not periodically. 
+
+See the Logging Results section (step 4) for the format to use. This ensures:
+1. Zero drift between autoresearch.jsonl and the markdown summary
+2. Any resuming agent has complete context on all runs
+3. No reliance on memory or judgment about "significant breakthroughs"
+
+**NEVER SKIP THIS STEP.** If you skip updating after an experiment, the next agent may repeat failed approaches or miss key insights, wasting computational resources and time.
