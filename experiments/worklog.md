@@ -18,6 +18,13 @@
 - Insight: Baseline established for comparison - runtime is higher than expected due to random seed
 - Next: Create optimized version and test various approaches
 
+### Run 2: Approach 1: Built-in sorted() comparison — runtime=5.855910s (DISCARD)
+- Timestamp: 2026-03-16 16:50
+- What changed: Replaced manual loop with array == sorted(array) comparison
+- Result: runtime=5.855910s (+24.4% slower)
+- Insight: Built-in sorted() creates a new list, adding overhead. Manual loop is faster.
+- Next: Try binary search or bisect-based detection
+
 ## Key Insights
 
 - Baseline runtime is very fast due to small input size (10 elements)
