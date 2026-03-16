@@ -25,6 +25,13 @@
 - Insight: Built-in sorted() creates a new list, adding overhead. Manual loop is faster.
 - Next: Try binary search or bisect-based detection
 
+### Run 3: Approach 2: Reduced random range — runtime=4.712137s (DISCARD)
+- Timestamp: 2026-03-16 16:52
+- What changed: Changed random range from 1-1000 to 1-10
+- Result: runtime=4.712137s (essentially same as baseline)
+- Insight: Duplicate values don't significantly impact bogo sort runtime for this input size
+- Next: Need structural algorithmic improvements
+
 ## Key Insights
 
 - Baseline runtime is very fast due to small input size (10 elements)

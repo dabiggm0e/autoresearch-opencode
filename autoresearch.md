@@ -33,4 +33,9 @@ Optimize the runtime of bogo_sort.py by creating an optimized sidecar file (bogo
 - **Description:** Approach 1: Built-in sorted() comparison
 - **Result:** runtime=5.855910s
 
-*Last updated: Run #2 on 2026-03-16*
+### Run #3 (DISCARD)
+- **Timestamp:** 2026-03-16 16:52
+- **Description:** Approach 2: Reduced random range for duplicate likelihood
+- **Result:** runtime=4.712137s
+
+*Last updated: Run #3 on 2026-03-16*

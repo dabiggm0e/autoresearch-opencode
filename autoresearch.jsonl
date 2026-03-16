@@ -1,3 +1,4 @@
 {"type":"config","name":"bogo-sort-runtime","metricName":"runtime","metricUnit":"seconds","bestDirection":"lower"}
 {"run":1,"commit":"7fd9002","metric":4.707548,"metrics":{},"status":"keep","description":"baseline","timestamp":1773640963,"segment":0}
 {"run":2,"commit":"8412e28","metric":5.855910,"metrics":{},"status":"discard","description":"Approach 1: Built-in sorted() comparison","timestamp":1773641000,"segment":0}
+{"run":3,"commit":"4f06fdf","metric":4.712137,"metrics":{},"status":"discard","description":"Approach 2: Reduced random range for duplicate likelihood","timestamp":1773641045,"segment":0}
