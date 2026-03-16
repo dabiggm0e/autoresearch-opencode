@@ -1,35 +1,46 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# autoresearch.sh
+#
+# Benchmarks the bogo sort runtime by running the script multiple times
+# and calculating the average execution time.
+#
+# Usage:
+#     ./autoresearch.sh
+#
+
 set -euo pipefail
 
-# Bogo Sort Benchmark Script
-# Runs bogo_sort_optimized.py 10 times and aggregates metrics
+# Configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PYTHON_SCRIPT="${SCRIPT_DIR}/bogo_sort_optimized.py"
+readonly NUM_RUNS=5
 
-NUM_ITERATIONS=10
-TOTAL_RUNTIME=0
-TOTAL_SHUFFLES=0
-TIMEOUT_PER_ITERATION=2  # seconds per iteration to ensure <30s total
+# Check if the Python script exists (Fail Fast)
+if [[ ! -f "${PYTHON_SCRIPT}" ]]; then
+    echo "Error: ${PYTHON_SCRIPT} does not exist" >&2
+    exit 1
+fi
 
-for ((i = 1; i <= NUM_ITERATIONS; i++)); do
-    # Run the script with timeout and capture output
-    if OUTPUT=$(timeout ${TIMEOUT_PER_ITERATION}s python3 bogo_sort_optimized.py 2>&1); then
-        # Extract runtime and shuffle_count from output
-        RUNTIME=$(echo "$OUTPUT" | grep "METRIC runtime=" | sed 's/METRIC runtime=\([0-9.]*\)s/\1/')
-        SHUFFLES=$(echo "$OUTPUT" | grep "METRIC shuffle_count=" | sed 's/METRIC shuffle_count=\([0-9]*\)/\1/')
-        echo "Iteration $i: runtime=${RUNTIME}s, shuffle_count=${SHUFFLES}"
-    else
-        # Timeout occurred - record as timeout
-        RUNTIME=$TIMEOUT_PER_ITERATION
-        SHUFFLES=0
-        echo "Iteration $i: TIMEOUT (>${TIMEOUT_PER_ITERATION}s)"
-    fi
-    
-    # Add to totals (using awk for floating-point arithmetic)
-    TOTAL_RUNTIME=$(awk "BEGIN {printf \"%.3f\", $TOTAL_RUNTIME + $RUNTIME}")
-    TOTAL_SHUFFLES=$((TOTAL_SHUFFLES + SHUFFLES))
-done
+# Run the benchmark using Python for timing and calculation
+average_runtime=$(python3 << 'PYTHON_EOF'
+import subprocess
+import time
 
-# Output aggregate metrics
-echo "METRIC runtime=${TOTAL_RUNTIME}s"
-echo "METRIC shuffle_count=${TOTAL_SHUFFLES}"
+NUM_RUNS = 5
+runtimes = []
 
-exit 0
+for _ in range(NUM_RUNS):
+    start = time.perf_counter()
+    subprocess.run(['python3', 'bogo_sort_optimized.py'], 
+                   capture_output=True, check=True)
+    end = time.perf_counter()
+    runtimes.append(end - start)
+
+average = sum(runtimes) / len(runtimes)
+print(f"{average:.6f}")
+PYTHON_EOF
+)
+
+# Output the metric in required format
+echo "METRIC runtime=${average_runtime}"

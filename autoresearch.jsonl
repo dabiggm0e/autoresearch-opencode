@@ -1,9 +1,1 @@
-{"type":"config","name":"bogo-sort-optimize","metricName":"runtime","metricUnit":"s","bestDirection":"lower"}{"run":1,"commit":"dcb54c9","metric":15.605,"metrics":{"shuffle_count":3565099},"status":"keep","description":"baseline","timestamp":1773516683,"segment":0}
-{"run":2,"commit":"c7fd4b6","metric":16.524,"metrics":{"shuffle_count":1352569},"status":"keep","description":"Approach 1: Built-in sorted() comparison","timestamp":1773516700,"segment":0}
-{"run":3,"commit":"approach2","metric":17.654,"metrics":{"shuffle_count":1914514},"status":"discard","description":"Approach 2: itertools pairwise check","timestamp":1773516750,"segment":0}
-{"run":4,"commit":"7060af0","metric":12.823,"metrics":{"shuffle_count":2320011},"status":"keep","description":"Approach 3: zip-based is_sorted","timestamp":1773516813,"segment":0}
-{"run":5,"commit":"4","metric":19.342,"metrics":{"shuffle_count":729212},"status":"discard","description":"Approach 4: Direct index comparison","timestamp":1773516850,"segment":0}
-{"run": 6, "commit": "approach5", "metric": 14.715, "metrics": {"shuffle_count": 1493813}, "status": "discard", "description": "Approach 5: Hybrid with first/last heuristic", "timestamp": 1773516928, "segment": 0}
-{"run": 7, "commit": "45ec1ff", "metric": 0.002, "metrics": {"shuffle_count": 1346}, "status": "keep", "description": "Approach 6: Bisect-based binary search detection", "timestamp": 1773516953, "segment": 0}
-{"run": 8, "commit": "approach7", "metric": 19.561, "metrics": {"shuffle_count": 741884}, "status": "discard", "description": "Approach 7: Optimized bisect with early exit", "timestamp": 1773516999, "segment": 0}
-{"run": 8, "commit": "approach8", "metric": 15.797, "metrics": {"shuffle_count": 948685}, "status": "discard", "description": "Approach 8: Simple all() comparison", "timestamp": 1773517050, "segment": 0}
+{"type":"config","name":"bogo-sort-runtime","metricName":"runtime","metricUnit":"s","bestDirection":"lower"}

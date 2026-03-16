@@ -1,47 +1,33 @@
-# Autoresearch: Optimize Bogo Sort Runtime
+# Autoresearch: Optimize bogo sort runtime
 
 ## Objective
-
-We're optimizing `bogo_sort.py` to reduce its average-case runtime by minimizing unnecessary shuffles. The goal is to find algorithmic improvements that maintain correctness while improving performance.
+Optimize the runtime of bogo sort algorithm in `bogo_sort.py`. The goal is to reduce the time spent in the hot loop (shuffle + sorted check) by optimizing the `is_sorted()` function. **Do not modify the original `bogo_sort.py`** - create a sidecar file `bogo_sort_optimized.py` instead.
 
 ## Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `runtime` | Primary (lower is better) | Average execution time across multiple runs |
-| `shuffle_count` | Secondary (lower is better) | Number of shuffles performed per successful sort |
+- **Primary**: runtime (seconds, lower is better)
+- **Secondary**: memory usage (MB, lower is better)
 
 ## How to Run
-
 ```bash
-./autoresearch.sh
+python3 bogo_sort_optimized.py
 ```
 
-This will execute the autoresearch loop with the specified optimization target.
+The script should use a fixed random seed for reproducibility and sort 10 random integers.
 
 ## Files in Scope
-
-The following files can be modified to achieve optimization:
-
-- `src/experiment.py` - Experiment orchestration
-- `src/runner.py` - Test runner
-- `src/metrics.py` - Metrics collection
-- `src/reporter.py` - Results reporting
-- `results/best_params.json` - Best parameters file
+- `bogo_sort_optimized.py` - New optimized version of bogo sort (create this)
+- `experiments/worklog.md` - Experiment log
 
 ## Off Limits
-
-**DO NOT MODIFY**: `bogo_sort.py` (original implementation)
-
-The original bogo sort implementation must remain intact. Any algorithmic improvements should be implemented in wrapper scripts or alternative approaches that don't modify the source file.
+- `bogo_sort.py` - Original file must remain untouched
 
 ## Constraints
-
-- Maintain correctness of sorting algorithm
-- Preserve the original bogo_sort.py file structure
-- Work within the autoresearch framework specifications
-- Document any experimental approach in results/ folder
+1. Do not modify the original `bogo_sort.py`
+2. Use fixed random seed (e.g., `random.seed(42)`) for reproducibility
+3. Benchmark with exactly 10 random integers (1-1000 range)
+4. Optimize for runtime only, not code simplicity
+5. Must produce correct sorted output
 
 ## What's Been Tried
 
-*Empty initially - will be updated as experiments progress*
+*Last updated: Run #0 on 2026-03-16*

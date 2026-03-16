@@ -158,7 +158,7 @@ State is maintained in `autoresearch.jsonl`:
 Remove all components:
 
 ```bash
-./scripts/uninstall.sh
+./skills/autoresearch/scripts/uninstall.sh
 ```
 
 ## License
