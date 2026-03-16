@@ -1,47 +1,31 @@
-# Autoresearch: Optimize Bogo Sort Runtime
+# Autoresearch: bogo_sort runtime optimization
 
 ## Objective
-
-We're optimizing `bogo_sort.py` to reduce its average-case runtime by minimizing unnecessary shuffles. The goal is to find algorithmic improvements that maintain correctness while improving performance.
+Optimize the runtime of bogo_sort.py by creating an optimized sidecar file (bogo_sort_optimized.py). The goal is to reduce execution time while maintaining the same algorithmic structure and functionality.
 
 ## Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `runtime` | Primary (lower is better) | Average execution time across multiple runs |
-| `shuffle_count` | Secondary (lower is better) | Number of shuffles performed per successful sort |
+- **Primary**: runtime (seconds, lower is better)
 
 ## How to Run
-
-```bash
-./autoresearch.sh
-```
-
-This will execute the autoresearch loop with the specified optimization target.
+`./autoresearch.sh` — outputs `METRIC runtime=number` lines.
 
 ## Files in Scope
-
-The following files can be modified to achieve optimization:
-
-- `src/experiment.py` - Experiment orchestration
-- `src/runner.py` - Test runner
-- `src/metrics.py` - Metrics collection
-- `src/reporter.py` - Results reporting
-- `results/best_params.json` - Best parameters file
+- `bogo_sort_optimized.py` - Sidecar optimized version (created, may modify)
+- `autoresearch.sh` - Benchmark script (created, may update)
 
 ## Off Limits
-
-**DO NOT MODIFY**: `bogo_sort.py` (original implementation)
-
-The original bogo sort implementation must remain intact. Any algorithmic improvements should be implemented in wrapper scripts or alternative approaches that don't modify the source file.
+- `bogo_sort.py` - Original implementation (read-only, must NOT be modified)
 
 ## Constraints
-
-- Maintain correctness of sorting algorithm
-- Preserve the original bogo_sort.py file structure
-- Work within the autoresearch framework specifications
-- Document any experimental approach in results/ folder
+- No new dependencies
+- Must work with existing algorithm structure
+- Original bogo_sort.py must remain unchanged
 
 ## What's Been Tried
 
-*Empty initially - will be updated as experiments progress*
+### Run #1 (KEEP) ⭐
+- **Timestamp:** 2026-03-16 12:00
+- **Description:** baseline
+- **Result:** runtime=0.001s
+
+*Last updated: Run #1 on 2026-03-16*

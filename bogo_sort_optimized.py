@@ -1,39 +1,25 @@
 #!/usr/bin/env python3
 """
-Bogo Sort Implementation
+Bogo Sort Implementation (Optimized Version)
 
 A randomized sorting algorithm that repeatedly shuffles the list until
 it happens to be sorted. Also known as stupid sort or permutation sort.
 
+This is an optimized sidecar version of bogo_sort.py.
+
 Usage:
-    python3 bogo_sort.py
+    python3 bogo_sort_optimized.py
 """
 
-import bisect
 import random
-import time
-
-
-# Global counter to track shuffle operations
-_shuffle_count = 0
 
 
 def is_sorted(array: list) -> bool:
-    """Check if the array is sorted in ascending order using binary search."""
-    if len(array) <= 1:
-        return True
-    # Use bisect to find where the order breaks (binary search)
-    # This is O(log n) for detecting unsorted arrays
-    sorted_copy = sorted(array)
-    # Binary search for first difference
-    lo, hi = 0, len(array)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if array[mid] == sorted_copy[mid]:
-            lo = mid + 1
-        else:
-            hi = mid
-    return lo >= len(array) - 1
+    """Check if the array is sorted in ascending order."""
+    for i in range(len(array) - 1):
+        if array[i] > array[i + 1]:
+            return False
+    return True
 
 
 def bogo_sort(array: list) -> list:
@@ -54,38 +40,20 @@ def bogo_sort(array: list) -> list:
 
     while not is_sorted(result):
         random.shuffle(result)
-        global _shuffle_count
-        _shuffle_count += 1
 
     return result
 
 
 def main():
     """Main entry point for the bogo sort script."""
-    global _shuffle_count
-
-    # Reset shuffle counter before sorting
-    _shuffle_count = 0
-
-    # Start timing
-    start_time = time.perf_counter()
-
     # Generate exactly 10 random integers (Hardcoded requirement)
     numbers = [random.randint(1, 1000) for _ in range(10)]
 
     # Sort using bogo sort (Atomic Predictability)
     sorted_numbers = bogo_sort(numbers)
 
-    # Stop timing
-    end_time = time.perf_counter()
-    runtime = end_time - start_time
-
     # Print the sorted array (Intentional Naming - clear output)
     print(sorted_numbers)
-
-    # Output metrics in parseable format
-    print(f"METRIC runtime={runtime:.3f}s")
-    print(f"METRIC shuffle_count={_shuffle_count}")
 
 
 if __name__ == "__main__":

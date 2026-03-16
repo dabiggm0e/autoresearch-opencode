@@ -46,7 +46,7 @@ This is the heart of the session. A fresh agent with no context should be able t
 and architectural insights so the agent doesn't repeat failed approaches.>
 ```
 
-Update `autoresearch.md` periodically — especially the "What's Been Tried" section — so resuming agents have full context.
+**MANDATORY:** Update `autoresearch.md` after EVERY experiment. See the Logging Results section (step 4) for the exact protocol. The "What's Been Tried" section must reflect all runs in autoresearch.jsonl immediately after each result is logged.
 
 ### `autoresearch.sh`
 
@@ -259,6 +259,22 @@ Add this warning banner to the dashboard when inconsistency is detected:
 
 ---
 
+## Pre-flight Validation
+
+Before running each experiment, check that autoresearch.md is current:
+
+**Quick check:** Count runs in autoresearch.jsonl and compare to the "Last updated" marker in autoresearch.md. If they don't match, the update protocol was violated - manually update before continuing.
+
+**Verification step:**
+```bash
+grep -oP '\*Last updated: Run #\d+ on [0-9-]+\*' autoresearch.md | tail -1
+```
+This should show a marker with the current run count. If it's missing or shows an older run number, update autoresearch.md before proceeding.
+
+**If drift detected:** Don't skip updating autoresearch.md. A fresh agent resuming this session depends on having complete context of all runs, not just the JSONL data.
+
+---
+
 ## Running Experiments (equivalent of `run_experiment`)
 
 Run the benchmark command, capturing timing and output:
@@ -320,11 +336,44 @@ Use the current HEAD hash (before revert) as the commit field.
 echo '{"run":<N>,"commit":"<hash>","metric":<value>,"metrics":{<secondaries>},"status":"<status>","description":"<desc>","timestamp":'$(date +%s)',"segment":<seg>}' >> autoresearch.jsonl
 ```
 
-### 4. Update dashboard
+### 4. Update autoresearch.md "What's Been Tried" section
+
+**REQUIRED after every experiment. Do not skip this step.**
+
+Append a summary of the latest result to the "What's Been Tried" section. Use this format:
+
+```markdown
+### Run #{RUN_NUMBER} ({STATUS}) {EMOJI}
+- **Timestamp:** YYYY-MM-DD HH:MM
+- **Description:** {BRIEF DESCRIPTION OF WHAT WAS TRIED}
+- **Result:** runtime={METRIC_VALUE}s
+
+*Last updated: Run #{RUN_NUMBER} on YYYY-MM-DD*
+```
+
+**Example entry:**
+```markdown
+### Run #4 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 11:23
+- **Description:** Approach 6: Bisect-based binary search detection
+- **Result:** runtime=0.002s
+
+*Last updated: Run #7 on 2026-03-14*
+```
+
+**Key requirements:**
+1. Include ALL runs (KEEP, DISCARD, CRASH) - do not filter any out
+2. Use emoji markers: ⭐ for KEEP, 💥 for CRASH, none for DISCARD
+3. Always update the "Last updated" marker at end of section
+4. If the section doesn't exist yet, create it with header `## What's Been Tried`
+
+**Implementation tip:** Read the latest entry from autoresearch.jsonl to get the run number, status, description, and metric value, then append formatted text to autoresearch.md.
+
+### 5. Update dashboard
 
 After every log, regenerate `autoresearch-dashboard.md` (see Dashboard section below).
 
-### 5. Append to worklog
+### 6. Append to worklog
 
 After every experiment, append a concise entry to `experiments/worklog.md`. This file survives context compactions and crashes, giving any resuming agent (or the user) a complete narrative of the session. Format:
 
@@ -341,11 +390,49 @@ Also update the "Key Insights" and "Next Ideas" sections at the bottom of the wo
 
 **On setup**, create `experiments/worklog.md` with the session header, data summary, and baseline result. **On resume**, read `experiments/worklog.md` to recover context.
 
-### 6. Secondary metric consistency
+### 7. Secondary metric consistency
 
 Once you start tracking a secondary metric, you MUST include it in every subsequent result. Parse the JSONL to discover which secondary metrics have been tracked and ensure all are present.
 
 If you want to add a new secondary metric mid-session, that's fine — but from that point forward, always include it.
+
+---
+
+## Example "What's Been Tried" Section Format
+
+After several experiments, the "What's Been Tried" section should look like:
+
+```markdown
+## What's Been Tried
+
+### Run #1 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 10:30
+- **Description:** baseline
+- **Result:** runtime=15.605s
+
+### Run #2 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 10:35
+- **Description:** Approach 1: Built-in sorted() comparison
+- **Result:** runtime=16.524s
+
+### Run #3 (DISCARD)
+- **Timestamp:** 2026-03-14 10:50
+- **Description:** Approach 2: itertools pairwise check
+- **Result:** runtime=17.654s
+
+### Run #4 (KEEP) ⭐
+- **Timestamp:** 2026-03-14 11:23
+- **Description:** Approach 6: Bisect-based binary search detection
+- **Result:** runtime=0.002s
+
+*Last updated: Run #9 on 2026-03-14*
+```
+
+**Key formatting rules:**
+- Include ALL runs (KEEP, DISCARD, CRASH) - don't filter any out
+- Use emoji to quickly identify status: ⭐ = KEEP, 💥 = CRASH
+- Always end with the "Last updated" marker for drift detection
+- Keep descriptions concise but informative
 
 ---
 
@@ -476,4 +563,11 @@ User messages sent while an experiment is running should be noted and incorporat
 
 ## Updating autoresearch.md
 
-Periodically update `autoresearch.md` — especially the "What's Been Tried" section — so that a fresh agent resuming the loop has full context on what worked, what didn't, and what architectural insights have been gained. Do this every 5-10 experiments or after any significant breakthrough.
+**MANDATORY PROTOCOL:** Update `autoresearch.md` after **EVERY** experiment, not periodically. 
+
+See the Logging Results section (step 4) for the format to use. This ensures:
+1. Zero drift between autoresearch.jsonl and the markdown summary
+2. Any resuming agent has complete context on all runs
+3. No reliance on memory or judgment about "significant breakthroughs"
+
+**NEVER SKIP THIS STEP.** If you skip updating after an experiment, the next agent may repeat failed approaches or miss key insights, wasting computational resources and time.

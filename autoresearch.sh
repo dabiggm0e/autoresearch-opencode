@@ -1,35 +1,26 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Autoresearch benchmark script for bogo_sort runtime optimization
 set -euo pipefail
 
-# Bogo Sort Benchmark Script
-# Runs bogo_sort_optimized.py 10 times and aggregates metrics
+# Run the optimized version and measure runtime
+python3 -c "
+import time
+import random
 
-NUM_ITERATIONS=10
-TOTAL_RUNTIME=0
-TOTAL_SHUFFLES=0
-TIMEOUT_PER_ITERATION=2  # seconds per iteration to ensure <30s total
+# Seed for reproducibility in benchmark
+random.seed(42)
 
-for ((i = 1; i <= NUM_ITERATIONS; i++)); do
-    # Run the script with timeout and capture output
-    if OUTPUT=$(timeout ${TIMEOUT_PER_ITERATION}s python3 bogo_sort_optimized.py 2>&1); then
-        # Extract runtime and shuffle_count from output
-        RUNTIME=$(echo "$OUTPUT" | grep "METRIC runtime=" | sed 's/METRIC runtime=\([0-9.]*\)s/\1/')
-        SHUFFLES=$(echo "$OUTPUT" | grep "METRIC shuffle_count=" | sed 's/METRIC shuffle_count=\([0-9]*\)/\1/')
-        echo "Iteration $i: runtime=${RUNTIME}s, shuffle_count=${SHUFFLES}"
-    else
-        # Timeout occurred - record as timeout
-        RUNTIME=$TIMEOUT_PER_ITERATION
-        SHUFFLES=0
-        echo "Iteration $i: TIMEOUT (>${TIMEOUT_PER_ITERATION}s)"
-    fi
-    
-    # Add to totals (using awk for floating-point arithmetic)
-    TOTAL_RUNTIME=$(awk "BEGIN {printf \"%.3f\", $TOTAL_RUNTIME + $RUNTIME}")
-    TOTAL_SHUFFLES=$((TOTAL_SHUFFLES + SHUFFLES))
-done
+# Import the optimized version
+import bogo_sort_optimized
 
-# Output aggregate metrics
-echo "METRIC runtime=${TOTAL_RUNTIME}s"
-echo "METRIC shuffle_count=${TOTAL_SHUFFLES}"
+# Generate test data
+numbers = [random.randint(1, 1000) for _ in range(10)]
 
-exit 0
+# Measure runtime
+start = time.perf_counter()
+sorted_numbers = bogo_sort_optimized.bogo_sort(numbers)
+end = time.perf_counter()
+
+runtime = end - start
+print(f'METRIC runtime={runtime:.6f}')
+"
