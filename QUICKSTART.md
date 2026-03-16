@@ -13,7 +13,7 @@ Autoresearch-opencode is an autonomous code optimization system that runs self-d
 
 ```bash
 git clone https://github.com/dabiggm0e/autoresearch-opencode.git
-cd autoresearch && ./scripts/install.sh
+cd autoresearch && ./skills/autoresearch/scripts/install.sh
 skill autoresearch
 ```
 
@@ -55,12 +55,12 @@ Try the included test project that optimizes the world's worst sorting algorithm
 
 **Context not appearing?**
 1. Check if plugin loaded: `skill autoresearch`
-2. Reinstall: `./scripts/install.sh`
+2. Reinstall: `./skills/autoresearch/scripts/install.sh`
 
 **State file not found?**
 1. Fresh start: Run experiment command directly
 2. Continue with context: Copy previous context manually
-3. Restore backup: Run `./scripts/backup-state.sh list autoresearch.jsonl`
+3. Restore backup: Run `./skills/autoresearch/scripts/backup-state.sh list autoresearch.jsonl`
 
 ## Next Steps
 

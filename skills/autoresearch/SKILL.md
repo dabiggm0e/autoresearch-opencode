@@ -54,6 +54,28 @@ Bash script (`set -euo pipefail`) that: pre-checks fast (syntax errors in <1s), 
 
 ---
 
+## Enforcement Script
+
+**The enforcement script automates all autoresearch operations.** Use it for validation, logging, and recovery.
+
+```bash
+# Validate state before experiment
+bash ./scripts/enforce-autoresearch-state.sh validate
+
+# Log result after experiment
+bash ./scripts/enforce-autoresearch-state.sh log-result "$RUN" "$HASH" "$METRIC" "$STATUS" "$DESCRIPTION"
+
+# Pre-experiment validation
+bash ./scripts/enforce-autoresearch-state.sh pre-experiment
+
+# Recovery from data loss
+bash ./scripts/enforce-autoresearch-state.sh recovery
+```
+
+See script help for details: `bash ./scripts/enforce-autoresearch-state.sh help`
+
+---
+
 ## JSONL State Protocol
 
 All experiment state lives in `autoresearch.jsonl`. This is the source of truth for resuming across sessions.
@@ -105,176 +127,6 @@ echo '{"type":"config","name":"<name>","metricName":"<metric>","metricUnit":"<un
 
 ---
 
-## Data Integrity Protocol
-
-**CRITICAL: JSONL data must never be corrupted or lost.**
-
-### Pre-Write Validation (before appending to JSONL)
-
-Before writing any new experiment result, validate the JSONL file:
-
-```bash
-# Validate JSONL file before writing
-validate_jsonl() {
-    local jsonl_file="autoresearch.jsonl"
-    
-    if [[ -f "$jsonl_file" ]]; then
-        # Count existing runs
-        local run_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
-        echo "Current runs in JSONL: $run_count" >&2
-        
-        # Verify last 5 lines are valid JSON
-        tail -n 5 "$jsonl_file" 2>/dev/null | while IFS= read -r line; do
-            if ! echo "$line" | python3 -m json.tool >/dev/null 2>&1; then
-                echo "WARNING: Invalid JSON found in state file" >&2
-                return 1
-            fi
-        done
-        
-        echo "JSONL validation: OK" >&2
-        return 0
-    fi
-    return 0  # File doesn't exist yet, that's OK
-}
-
-# Call validation before any write
-validate_jsonl || {
-    echo "  WARNING: JSONL validation failed. Proceeding with caution." >&2
-}
-```
-
-### Atomic Write Pattern
-
-Never append directly to JSONL. Use atomic write pattern:
-
-```bash
-write_jsonl_entry() {
-    local entry="$1"
-    local jsonl_file="autoresearch.jsonl"
-    local temp_file="${jsonl_file}.tmp.$$"
-    
-    # Create temp file
-    cat "$jsonl_file" > "$temp_file" 2>/dev/null || touch "$temp_file"
-    
-    # Append entry
-    echo "$entry" >> "$temp_file"
-    
-    # Validate the new entry
-    if ! echo "$entry" | python3 -m json.tool >/dev/null 2>&1; then
-        rm -f "$temp_file"
-        echo "  WARNING: Invalid JSON entry, not writing" >&2
-        return 1
-    fi
-    
-    # Atomic move (guaranteed all-or-nothing)
-    mv "$temp_file" "$jsonl_file"
-    
-    # Verify write succeeded
-    local new_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
-    echo "Write verification: $new_count runs in JSONL" >&2
-    
-    return 0
-}
-```
-
-### Post-Write Verification
-
-After every write operation, verify the data was written correctly:
-
-```bash
-verify_write() {
-    local expected_run=$1
-    local jsonl_file="autoresearch.jsonl"
-    
-    if [[ -f "$jsonl_file" ]]; then
-        local actual_count=$(grep -c '"run":' "$jsonl_file" 2>/dev/null || echo 0)
-        
-        if [[ "$actual_count" -lt "$expected_run" ]]; then
-            echo "  WARNING: Run count mismatch! Expected $expected_run, got $actual_count" >&2
-            echo "This may indicate data loss in previous writes." >&2
-            return 1
-        fi
-        
-        echo "Write verification: OK (run $expected_run present)" >&2
-        return 0
-    fi
-    return 1
-}
-```
-
----
-
-### User-Confirmable Actions
-
-Before any user-confirmable action (e.g., manual intervention, major changes, discarding multiple experiments), create a backup:
-
-```bash
-# Backup state before user-confirmable action
-backup_before_confirm() {
-    echo "  User confirmation required. Creating backup..." >&2
-    
-    # Use backup utility if available
-    if [[ -f "./scripts/backup-state.sh" ]]; then
-        ./scripts/backup-state.sh backup autoresearch.jsonl 2>/dev/null || true
-    else
-        # Fallback: simple backup
-        cp autoresearch.jsonl "autoresearch.jsonl.backup.$(date +%s)" 2>/dev/null || true
-    fi
-    
-    echo "Backup created. Awaiting user confirmation..." >&2
-}
-```
-
-**Always call `backup_before_confirm` before any operation that requires user approval.**
-
----
-
-### Dashboard Data Consistency Check
-
-When generating the dashboard, check for data consistency:
-
-#### Data Consistency Check
-
-If the number of runs in `autoresearch.jsonl` doesn't match the number of entries in `experiments/worklog.md`:
-
-1. **Check for backups**: `scripts/backup-state.sh list autoresearch.jsonl`
-2. **If backups exist**: Restore with `scripts/backup-state.sh restore-auto`
-3. **If no backups**: Manually recreate missing runs from worklog notes
-4. **Note the discrepancy** in the dashboard header
-
-Add this warning banner to the dashboard when inconsistency is detected:
-
-```markdown
- **DATA INCONSISTENCY DETECTED**
-
-- **Worklog documents**: <WORKLOG_RUN_COUNT> experiments
-- **JSONL contains**: <JSONL_RUN_COUNT> runs
-- **Missing**: <DIFF> runs **LOST!**
-
-**Recovery steps:**
-1. Check backups: `scripts/backup-state.sh list autoresearch.jsonl`
-2. Restore if available: `scripts/backup-state.sh restore-auto`
-3. Otherwise, manually recreate missing runs from worklog
-```
-
----
-
-## Pre-flight Validation
-
-Before running each experiment, check that autoresearch.md is current:
-
-**Quick check:** Count runs in autoresearch.jsonl and compare to the "Last updated" marker in autoresearch.md. If they don't match, the update protocol was violated - manually update before continuing.
-
-**Verification step:**
-```bash
-grep -oP '\*Last updated: Run #\d+ on [0-9-]+\*' autoresearch.md | tail -1
-```
-This should show a marker with the current run count. If it's missing or shows an older run number, update autoresearch.md before proceeding.
-
-**If drift detected:** Don't skip updating autoresearch.md. A fresh agent resuming this session depends on having complete context of all runs, not just the JSONL data.
-
----
-
 ## Running Experiments (equivalent of `run_experiment`)
 
 Run the benchmark command, capturing timing and output:
@@ -312,9 +164,7 @@ Secondary metrics are for monitoring only — they almost never affect keep/disc
 **If keep:**
 ```bash
 git add -A
-git diff --cached --quiet && echo "nothing to commit" || git commit -m "<description>
-
-Result: {\"status\":\"keep\",\"<metricName>\":<value>,<secondary metrics>}"
+git diff --cached --quiet && echo "nothing to commit" || git commit -m "$DESCRIPTION"
 ```
 
 Then get the new commit hash:
@@ -332,6 +182,12 @@ Use the current HEAD hash (before revert) as the commit field.
 
 ### 3. Append result to JSONL
 
+**Use the enforcement script:**
+```bash
+bash ./scripts/enforce-autoresearch-state.sh log-result "$RUN" "$HASH" "$METRIC" "$STATUS" "$DESCRIPTION"
+```
+
+**Alternative manual method (if script unavailable):**
 ```bash
 echo '{"run":<N>,"commit":"<hash>","metric":<value>,"metrics":{<secondaries>},"status":"<status>","description":"<desc>","timestamp":'$(date +%s)',"segment":<seg>}' >> autoresearch.jsonl
 ```
@@ -459,39 +315,46 @@ Include delta percentages vs baseline for each metric value. Show ALL runs in th
 
 ---
 
-## State File Backup (Enhanced)
+## Backup & Recovery
+
+**Critical: Protect your experiment state. Always backup before major operations and recover immediately from data loss.**
+
+### User-Confirmable Actions
+
+Before any operation requiring user confirmation (manual intervention, discarding multiple experiments, major changes), create a backup:
+
+```bash
+# Before any user-confirmable action
+bash ./scripts/backup-state.sh backup autoresearch.jsonl
+```
+
+**Always call the backup script before any operation that requires user approval.**
+
+### State File Backup
 
 **BEFORE user-confirmable actions**, create backups:
 
 ```bash
 # Before any major operation requiring user confirmation
-if [[ -f "./scripts/backup-state.sh" ]]; then
-    ./scripts/backup-state.sh backup autoresearch.jsonl 2>/dev/null || true
-else
-    cp autoresearch.jsonl "autoresearch.jsonl.backup.$(date +%s)" 2>/dev/null || true
-fi
+bash ./scripts/backup-state.sh backup autoresearch.jsonl
 ```
 
-**Best practices**:
+**Best practices:**
 - Always backup before major changes or user confirmations
 - Keep the last 5 backups (delete older ones)
 - Restore from backup if experiment crashes or state becomes corrupted
 
-**Automated cleanup**:
+**Automated cleanup:**
 ```bash
 # Keep only last 5 backups
-ls -t autoresearch.jsonl.bak.* 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+bash ./scripts/backup-state.sh cleanup
 ```
 
-**Warning**: If JSONL data loss is detected, check backups immediately before continuing.
-
----
-
-## Data Loss Detection and Recovery
+### Data Loss Detection and Recovery
 
 **If you detect data loss** (e.g., dashboard shows inconsistency, JSONL count doesn't match worklog):
 
-1. **Immediate actions**:
+1. **Immediate actions:**
    ```bash
    # Check for data loss
    JSONL_COUNT=$(grep -c '"run":' autoresearch.jsonl 2>/dev/null || echo 0)
@@ -502,17 +365,60 @@ ls -t autoresearch.jsonl.bak.* 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/nul
    fi
    ```
 
-2. **Check backups**:
+2. **Check backups:**
    ```bash
    ./scripts/backup-state.sh list autoresearch.jsonl
    ```
 
-3. **Recovery options**:
+3. **Recovery options:**
    - **Best**: Restore from backup if recent enough
    - **Alternative**: Manually recreate missing runs from worklog notes
    - **Last resort**: Start new segment with new config header
 
 4. **Prevention**: Always backup before user-confirmable actions (see "User-Confirmable Actions" above)
+
+**Automated recovery:** `bash ./scripts/enforce-autoresearch-state.sh recovery`
+
+### Backup Usage Documentation
+
+For comprehensive backup documentation, see [`BACKUP-USAGE.md`](./BACKUP-USAGE.md).
+
+This guide covers:
+- Installation and setup
+- Command reference table  
+- Usage examples
+- Integration with workflow
+- Best practices and troubleshooting
+
+---
+
+### Dashboard Data Consistency Check
+
+When generating the dashboard, check for data consistency:
+
+#### Data Consistency Check
+
+If the number of runs in `autoresearch.jsonl` doesn't match the number of entries in `experiments/worklog.md`:
+
+1. **Check for backups**: `./scripts/backup-state.sh list autoresearch.jsonl`
+2. **If backups exist**: Restore with `./scripts/backup-state.sh restore-auto`
+3. **If no backups**: Manually recreate missing runs from worklog notes
+4. **Note the discrepancy** in the dashboard header
+
+Add this warning banner to the dashboard when inconsistency is detected:
+
+```markdown
+ **DATA INCONSISTENCY DETECTED**
+
+- **Worklog documents**: <WORKLOG_RUN_COUNT> experiments
+- **JSONL contains**: <JSONL_RUN_COUNT> runs
+- **Missing**: <DIFF> runs **LOST!**
+
+**Recovery steps:**
+1. Check backups: `./scripts/backup-state.sh list autoresearch.jsonl`
+2. Restore if available: `./scripts/backup-state.sh restore-auto`
+3. Otherwise, manually recreate missing runs from worklog
+```
 
 ---
 
@@ -540,7 +446,7 @@ If `autoresearch.jsonl` is missing when resuming:
    - A) Create new state (fresh start)
    - B) Continue with autoresearch.md context only
    - C) Restore from backup (if available)
-"
+ "
 3. **If fresh start**: initialize new JSONL with config header
 4. **If continuing with context only**: proceed with autoresearch.md data but note the limitation
 
@@ -571,3 +477,158 @@ See the Logging Results section (step 4) for the format to use. This ensures:
 3. No reliance on memory or judgment about "significant breakthroughs"
 
 **NEVER SKIP THIS STEP.** If you skip updating after an experiment, the next agent may repeat failed approaches or miss key insights, wasting computational resources and time.
+
+---
+
+## Protocol Validation
+
+The enforcement script automatically detects common violations including:
+
+- **Missing fields:** description, metrics, or timestamp in runs
+- **Invalid values:** status must be one of {kept, replaced, crashed}
+- **Orphan results:** run numbers must match count and be > 0
+
+Run validation anytime:
+```bash
+bash ./scripts/enforce-autoresearch-state.sh detect-violations
+```
+
+See all available checks: `bash ./scripts/enforce-autoresearch-state.sh --help`
+
+---
+
+## Quick Reference Card
+
+**Copy-paste these commands during autoresearch sessions.**
+
+### Session Validation
+
+Use the enforcement script for state validation and logging:
+
+```bash
+# Validate complete state
+bash ./scripts/enforce-autoresearch-state.sh validate
+
+# Pre-experiment validation (run before each experiment)
+bash ./scripts/enforce-autoresearch-state.sh pre-experiment
+
+# Log experiment result after completion
+bash ./scripts/enforce-autoresearch-state.sh log-result "$RUN" "$HASH" "$METRIC" "$STATUS" "$DESCRIPTION"
+```
+
+See `bash ./scripts/enforce-autoresearch-state.sh help` for all options.
+
+### JSONL Debugging
+
+```bash
+# Find invalid JSON lines
+tail -n 20 autoresearch.jsonl | python3 -c "
+import sys, json
+for i, line in enumerate(sys.stdin, start=-19):
+    try: json.loads(line)
+    except: print(f'Line {i}: INVALID - {line[:80]}')"
+
+# Show run summary by status
+python3 -c "
+import json
+from collections import Counter
+with open('autoresearch.jsonl') as f:
+    statuses = [json.loads(l)['status'] for l in f if 'status' in json.loads(l)]
+    print('Status distribution:', Counter(statuses))"
+
+# Find best run
+python3 -c "
+import json
+with open('autoresearch.jsonl') as f:
+    entries = [json.loads(l) for l in f if 'run' in json.loads(l)]
+    best = min(entries, key=lambda e: e['metric']) if all(e.get('metric') for e in entries) else entries[0]
+    print(f'Best: Run #{best[\"run\"]} = {best[\"metric\"]} ({best[\"status\"]})')"
+
+# Show last 5 runs
+tail -n 5 autoresearch.jsonl | python3 -m json.tool --no-ensure-ascii
+```
+
+### State Recovery
+
+Use the backup-state script for managing experiment state backups:
+
+```bash
+# List available backups
+./scripts/backup-state.sh list autoresearch.jsonl
+
+# Restore from most recent backup
+./scripts/backup-state.sh restore-auto autoresearch.jsonl
+
+# Create manual backup before major operation
+./scripts/backup-state.sh backup autoresearch.jsonl
+
+# Recovery from data loss
+./scripts/backup-state.sh recover autoresearch.jsonl
+```
+
+See `./scripts/backup-state.sh help` for all options.
+
+### Data Loss Detection
+
+```bash
+# Check JSONL vs worklog consistency
+JSONL_COUNT=$(grep -c '"run":' autoresearch.jsonl || echo 0)
+WORKLOG_COUNT=$(grep -c "^### Run" experiments/worklog.md || echo 0)
+[[ "$JSONL_COUNT" -eq "$WORKLOG_COUNT" ]] && echo "✓ Data consistent: $JSONL_COUNT runs" || echo "✗ DATA LOSS: JSONL=$JSONL_COUNT, worklog=$WORKLOG_COUNT"
+
+# Find missing runs
+python3 -c "
+import json
+import re
+with open('autoresearch.jsonl') as f:
+    jsonl_runs = set(int(json.loads(l)['run']) for l in f if 'run' in json.loads(l))
+with open('experiments/worklog.md') as f:
+    worklog_runs = set(int(m.group(1)) for m in re.finditer(r'^### Run (\d+)', f.read(), re.MULTILINE))
+missing = worklog_runs - jsonl_runs
+extra = jsonl_runs - worklog_runs
+if missing: print(f'✗ Missing from JSONL: {sorted(missing)}')
+if extra: print(f'✗ Extra in JSONL: {sorted(extra)}')
+if not missing and not extra: print('✓ No discrepancies')"
+```
+
+### Emergency Commands
+
+```bash
+# Force re-initialize (creates new segment)
+echo '{"type":"config","name":"new_segment","metricName":"'"$(head -n 1 autoresearch.jsonl | python3 -c 'import sys,json; print(json.load(sys.stdin)["metricName"])')"'","metricUnit":"'"$(head -n 1 autoresearch.jsonl | python3 -c 'import sys,json; print(json.load(sys.stdin)["metricUnit"])')"'","bestDirection":"'"$(head -n 1 autoresearch.jsonl | python3 -c 'import sys,json; print(json.load(sys.stdin)["bestDirection"])')"'"}' >> autoresearch.jsonl
+
+# Reset to baseline (delete all but first run)
+python3 -c "
+import json
+with open('autoresearch.jsonl') as f:
+    lines = f.readlines()
+with open('autoresearch.jsonl.bak', 'w') as f:
+    f.write(lines[0])  # Keep header
+    f.write(lines[1])  # Keep baseline
+"
+mv autoresearch.jsonl.bak autoresearch.jsonl
+
+# Generate fresh dashboard
+python3 -c "
+import json
+from datetime import datetime
+with open('autoresearch.jsonl') as f:
+    entries = [json.loads(l) for l in f if 'run' in json.loads(l)]
+print(f'# Autoresearch Dashboard: {entries[0].get("segment", 0)}')
+print(f'\\n**Runs:** {len(entries)} | **Kept:** {sum(1 for e in entries if e[\"status\"]==\"keep\")} | **Discarded:** {sum(1 for e in entries if e[\"status\"]==\"discard\")} | **Crashed:** {sum(1 for e in entries if e[\"status\"]==\"crash\")}')
+" > autoresearch-dashboard.md
+```
+
+### Quick Checklist Before Each Loop Iteration
+
+```bash
+# Run this before starting each new experiment:
+echo "=== Pre-experiment Checklist ===" && \
+[[ -f autoresearch.md ]] && echo "✓ autoresearch.md" || echo "✗ autoresearch.md" && \
+[[ -f autoresearch.sh ]] && echo "✓ autoresearch.sh" || echo "✗ autoresearch.sh" && \
+[[ -f autoresearch.jsonl ]] && echo "✓ autoresearch.jsonl" || echo "✗ autoresearch.jsonl" && \
+head -n 1 autoresearch.jsonl | python3 -c "import sys,json; exit(0 if json.load(sys.stdin)['type']=='config' else 1)" && echo "✓ JSONL header" || echo "✗ JSONL header" && \
+TOTAL=$(grep -c '"run":' autoresearch.jsonl || echo 0) && \
+MARKER=$(grep -oP 'Last updated: Run #\K\d+' autoresearch.md | tail -1 || echo "0") && \
+[[ "$TOTAL" -eq "$MARKER" ]] && echo "✓ Marker sync: $TOTAL" || echo "✗ Drift: $MARKER vs $TOTAL"
+```
