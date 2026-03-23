@@ -112,7 +112,7 @@ cat autoresearch.jsonl
 
 | Component | OpenCode Approach |
 |-----------|-------------------|
-| **Context Injection** | TypeScript plugin (tui.prompt.append event) |
+| **Context Injection** | TypeScript plugin (experimental.chat.system.transform hook) |
 | **Tool Access** | Built-in OpenCode tools (read, write, bash, glob, grep) |
 | **State Management** | JSONL state file (`autoresearch.jsonl`) |
 | **Experiment Loop** | Skill instructions with guard clauses and atomic functions |
