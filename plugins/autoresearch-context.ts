@@ -21,9 +21,9 @@ You are in autoresearch mode.
 
 const SENTINEL_FILE = ".autoresearch-off";
 
-const autoresearchContext: Plugin = async ({ directory }) => {
+export const AutoresearchContextPlugin: Plugin = async ({ directory }) => {
   return {
-    "chat.message": async (_input, output) => {
+    "experimental.chat.system.transform": async (_input, output) => {
       // Check if sentinel file exists — if so, skip injection
       const sentinelPath = join(directory, SENTINEL_FILE);
       if (existsSync(sentinelPath)) {
@@ -36,13 +36,8 @@ const autoresearchContext: Plugin = async ({ directory }) => {
         return;
       }
 
-      // Prepend autoresearch context to the user message
-      output.parts.unshift({
-        type: "text",
-        text: CONTEXT_INJECTION,
-      });
+      // Append autoresearch context to the system prompt
+      output.system.push(CONTEXT_INJECTION);
     },
   };
 };
-
-export default autoresearchContext;
