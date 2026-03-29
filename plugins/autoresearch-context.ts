@@ -1,4 +1,6 @@
-import { type Plugin } from '@opencode-ai/plugin';
+import type { Plugin } from "@opencode-ai/plugin";
+import { existsSync } from "fs";
+import { join } from "path";
 
 const CONTEXT_INJECTION = `
 ## Autoresearch Mode (ACTIVE)
@@ -17,60 +19,25 @@ You are in autoresearch mode.
 - User messages during experiments are steers — finish current experiment, then incorporate the idea in the next experiment
 `;
 
-const SENTINEL_FILE = '.autoresearch-off';
+const SENTINEL_FILE = ".autoresearch-off";
 
-export const autoresearchContext: Plugin = {
-  name: 'autoresearch-context',
-  description: 'Inject autoresearch context before every prompt',
-
-  events: {
-    'tui.prompt.append': async (context) => {
-      // Check if sentinel file exists
-      const hasSentinel = await checkSentinelFile();
-      
-      if (hasSentinel) {
+export const AutoresearchContextPlugin: Plugin = async ({ directory }) => {
+  return {
+    "experimental.chat.system.transform": async (_input, output) => {
+      // Check if sentinel file exists — if so, skip injection
+      const sentinelPath = join(directory, SENTINEL_FILE);
+      if (existsSync(sentinelPath)) {
         return;
       }
 
       // Check if autoresearch.md command file exists
-      const hasCommandFile = await checkCommandFile();
-      
-      if (!hasCommandFile) {
+      const commandPath = join(directory, "autoresearch.md");
+      if (!existsSync(commandPath)) {
         return;
       }
 
-      // Inject context
-      context.append(CONTEXT_INJECTION);
+      // Append autoresearch context to the system prompt
+      output.system.push(CONTEXT_INJECTION);
     },
-  },
+  };
 };
-
-/**
- * Check if the sentinel file exists
- */
-async function checkSentinelFile(): Promise<boolean> {
-  try {
-    const fs = await import('fs');
-    const path = await import('path');
-    
-    const sentinelPath = path.join(process.cwd(), SENTINEL_FILE);
-    return fs.existsSync(sentinelPath);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if the autoresearch command file exists
- */
-async function checkCommandFile(): Promise<boolean> {
-  try {
-    const fs = await import('fs');
-    const path = await import('path');
-    
-    const commandPath = path.join(process.cwd(), 'autoresearch.md');
-    return fs.existsSync(commandPath);
-  } catch {
-    return false;
-  }
-}
